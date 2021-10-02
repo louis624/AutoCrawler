@@ -16,14 +16,17 @@ Copyright 2018 YoongiKim
 import os
 import requests
 import shutil
-from multiprocessing import Pool
+from multiprocessing import Pool, Process
 import argparse
 from collect_links import CollectLinks
 import imghdr
 import base64
 from pathlib import Path
 import random
+from loguru import logger
+import sys
 
+logger.add("./log/run.log", level="INFO")
 
 class Sites:
     GOOGLE = 1
@@ -135,7 +138,7 @@ class AutoCrawler:
             lines = filter(lambda x: x != '' and x is not None, lines)
             keywords = sorted(set(lines))
 
-        print('{} keywords found: {}'.format(len(keywords), keywords))
+        logger.info('{} keywords found: {}'.format(len(keywords), keywords))
 
         # re-save sorted keywords
         with open(keywords_file, 'w+', encoding='utf-8') as f:
@@ -152,7 +155,7 @@ class AutoCrawler:
                 else:
                     shutil.copyfileobj(object.raw, file)
         except Exception as e:
-            print('Save failed - {}'.format(e))
+            logger.info('Save failed - {}'.format(e))
 
     @staticmethod
     def base64_to_object(src):
@@ -174,7 +177,7 @@ class AutoCrawler:
                 break
 
             try:
-                print('Downloading {} from {}: {} / {}'.format(keyword, site_name, success_count + 1, max_count))
+                logger.info('Downloading {} from {}: {} / {}'.format(keyword, site_name, success_count + 1, max_count))
 
                 if str(link).startswith('data:image/jpeg;base64'):
                     response = self.base64_to_object(link)
@@ -200,7 +203,7 @@ class AutoCrawler:
                 ext2 = self.validate_image(path)
                 sucess = True
                 if ext2 is None:
-                    print('Unreadable file - {}'.format(link))
+                    logger.info('Unreadable file - {}'.format(link))
                     os.remove(path)
                     success_count -= 1
                     sucess = False
@@ -208,14 +211,14 @@ class AutoCrawler:
                     if ext != ext2:
                         path2 = no_ext_path + '.' + ext2
                         os.rename(path, path2)
-                        print('Renamed extension {} -> {}'.format(ext, ext2))
+                        logger.info('Renamed extension {} -> {}'.format(ext, ext2))
 
                 if sucess:
                     fp.write(f"{path}: {link}\n")
-                    print(f"{path}: {link}")
+                    logger.info(f"{path}: {link}")
 
             except Exception as e:
-                print('Download failed - ', e)
+                logger.info('Download failed - ', e)
                 continue
 
         fp.close()
@@ -228,13 +231,13 @@ class AutoCrawler:
             proxy = None
             if self.proxy_list:
                 proxy = random.choice(self.proxy_list)
-            collect = CollectLinks(no_gui=self.no_gui, proxy=proxy)  # initialize chrome driver
+            collect = CollectLinks(no_gui=self.no_gui, proxy=proxy, logger=logger)  # initialize chrome driver
         except Exception as e:
-            print('Error occurred while initializing chromedriver - {}'.format(e))
+            logger.info('Error occurred while initializing chromedriver - {}'.format(e))
             return
 
         try:
-            print('Collecting links... {} from {}'.format(keyword, site_name))
+            logger.info('Collecting links... {} from {}'.format(keyword, site_name))
 
             if site_code == Sites.GOOGLE:
                 links = collect.google(keyword, add_url)
@@ -249,17 +252,17 @@ class AutoCrawler:
                 links = collect.naver_full(keyword, add_url)
 
             else:
-                print('Invalid Site Code')
+                logger.info('Invalid Site Code')
                 links = []
 
-            print('Downloading images from collected links... {} from {}'.format(keyword, site_name))
+            logger.info('Downloading images from collected links... {} from {}'.format(keyword, site_name))
             self.download_images(keyword, links, site_name, max_count=self.limit)
             Path('{}/{}/{}_done'.format(self.download_path, keyword.replace('"', ''), site_name)).touch()
 
-            print('Done {} : {}'.format(site_name, keyword))
+            logger.info('Done {} : {}'.format(site_name, keyword))
 
         except Exception as e:
-            print('Exception {}:{} - {}'.format(site_name, keyword, e))
+            logger.info('Exception {}:{} - {}'.format(site_name, keyword, e))
 
     def download(self, args):
         self.download_from_site(keyword=args[0], site_code=args[1])
@@ -274,7 +277,7 @@ class AutoCrawler:
             google_done = os.path.exists(os.path.join(os.getcwd(), dir_name, 'google_done'))
             naver_done = os.path.exists(os.path.join(os.getcwd(), dir_name, 'naver_done'))
             if google_done and naver_done and self.skip:
-                print('Skipping done task {}'.format(dir_name))
+                logger.info('Skipping done task {}'.format(dir_name))
                 continue
 
             if self.do_google and not google_done:
@@ -289,18 +292,26 @@ class AutoCrawler:
                 else:
                     tasks.append([keyword, Sites.NAVER])
 
-        pool = Pool(self.n_threads)
-        pool.map_async(self.download, tasks)
-        pool.close()
-        pool.join()
-        print('Task ended. Pool join.')
+        procs = []
+        for task in tasks:
+            proc = Process(target=self.download, args=(task,))
+            proc.start()
+            procs.append(proc)
+
+        for proc in procs:
+            proc.join()
+        # pool = Pool(self.n_threads)
+        # pool.map_async(self.download, tasks)
+        # pool.close()
+        # pool.join()
+        logger.info('Task ended. Pool join.')
 
         self.imbalance_check()
 
-        print('End Program')
+        logger.info('End Program')
 
     def imbalance_check(self):
-        print('Data imbalance checking...')
+        logger.info('Data imbalance checking...')
 
         dict_num_files = {}
 
@@ -311,7 +322,7 @@ class AutoCrawler:
         avg = 0
         for dir, n_files in dict_num_files.items():
             avg += n_files / len(dict_num_files)
-            print('dir: {}, file_count: {}'.format(dir, n_files))
+            logger.info('dir: {}, file_count: {}'.format(dir, n_files))
 
         dict_too_small = {}
 
@@ -320,27 +331,27 @@ class AutoCrawler:
                 dict_too_small[dir] = n_files
 
         if len(dict_too_small) >= 1:
-            print('Data imbalance detected.')
-            print('Below keywords have smaller than 50% of average file count.')
-            print('I recommend you to remove these directories and re-download for that keyword.')
-            print('_________________________________')
-            print('Too small file count directories:')
+            logger.info('Data imbalance detected.')
+            logger.info('Below keywords have smaller than 50% of average file count.')
+            logger.info('I recommend you to remove these directories and re-download for that keyword.')
+            logger.info('_________________________________')
+            logger.info('Too small file count directories:')
             for dir, n_files in dict_too_small.items():
-                print('dir: {}, file_count: {}'.format(dir, n_files))
+                logger.info('dir: {}, file_count: {}'.format(dir, n_files))
 
-            print("Remove directories above? (y/n)")
+            logger.info("Remove directories above? (y/n)")
             answer = input()
 
             if answer == 'y':
                 # removing directories too small files
-                print("Removing too small file count directories...")
+                logger.info("Removing too small file count directories...")
                 for dir, n_files in dict_too_small.items():
                     shutil.rmtree(dir)
-                    print('Removed {}'.format(dir))
+                    logger.info('Removed {}'.format(dir))
 
-                print('Now re-run this program to re-download removed files. (with skip_already_exist=True)')
+                logger.info('Now re-run this program to re-download removed files. (with skip_already_exist=True)')
         else:
-            print('Data imbalance not detected.')
+            logger.info('Data imbalance not detected.')
 
 
 if __name__ == '__main__':
@@ -348,7 +359,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip', type=str, default='true',
                         help='Skips keyword already downloaded before. This is needed when re-downloading.')
     parser.add_argument('--threads', type=int, default=4, help='Number of threads to download.')
-    parser.add_argument('--google', type=str, default='true', help='Download from google.com (boolean)')
+    parser.add_argument('--google', type=str, default='false', help='Download from google.com (boolean)')
     parser.add_argument('--naver', type=str, default='true', help='Download from naver.com (boolean)')
     parser.add_argument('--full', type=str, default='false',
                         help='Download full resolution image instead of thumbnails (slow)')
@@ -357,7 +368,7 @@ if __name__ == '__main__':
                         help='No GUI mode. Acceleration for full_resolution mode. '
                              'But unstable on thumbnail mode. '
                              'Default: "auto" - false if full=false, true if full=true')
-    parser.add_argument('--limit', type=int, default=0,
+    parser.add_argument('--limit', type=int, default=10,
                         help='Maximum count of images to download per site. (0: infinite)')
     parser.add_argument('--proxy-list', type=str, default='',
                         help='The comma separated proxy list like: "socks://127.0.0.1:1080,http://127.0.0.1:1081". '
@@ -381,7 +392,7 @@ if __name__ == '__main__':
     else:
         _no_gui = False
 
-    print(
+    logger.info(
         'Options - skip:{}, threads:{}, google:{}, naver:{}, full_resolution:{}, face:{}, no_gui:{}, limit:{}, _proxy_list:{}'
             .format(_skip, _threads, _google, _naver, _full, _face, _no_gui, _limit, _proxy_list))
 

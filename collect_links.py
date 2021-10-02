@@ -25,18 +25,20 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import os.path as osp
+from loguru import logger
 
 class CollectLinks:
-    def __init__(self, no_gui=False, proxy=None):
+    def __init__(self, no_gui=False, proxy=None, **kwargs):
         executable = ''
+        # logger = logger
         if platform.system() == 'Windows':
-            print('Detected OS : Windows')
+            logger.info('Detected OS : Windows')
             executable = './chromedriver/chromedriver_win.exe'
         elif platform.system() == 'Linux':
-            print('Detected OS : Linux')
+            logger.info('Detected OS : Linux')
             executable = './chromedriver/chromedriver_linux'
         elif platform.system() == 'Darwin':
-            print('Detected OS : Mac')
+            logger.info('Detected OS : Mac')
             executable = './chromedriver/chromedriver_mac'
         else:
             raise OSError('Unknown OS Type')
@@ -67,14 +69,14 @@ class CollectLinks:
         if browser_version.split('.')[0] != chromedriver_version.split('.')[0]:
             major_version_different = True
 
-        print('_________________________________')
-        print('Current web-browser version:\t{}'.format(browser_version))
-        print('Current chrome-driver version:\t{}'.format(chromedriver_version))
+        logger.info('_________________________________')
+        logger.info('Current web-browser version:\t{}'.format(browser_version))
+        logger.info('Current chrome-driver version:\t{}'.format(chromedriver_version))
         if major_version_different:
-            print('warning: Version different')
-            print(
+            logger.info('warning: Version different')
+            logger.info(
                 'Download correct version at "http://chromedriver.chromium.org/downloads" and place in "./chromedriver"')
-        print('_________________________________')
+        logger.info('_________________________________')
 
     def get_scroll(self):
         pos = self.browser.execute_script("return window.pageYOffset;")
@@ -88,8 +90,8 @@ class CollectLinks:
             elem.click()
             self.highlight(elem)
         except Exception as e:
-            print('Click time out - {}'.format(xpath))
-            print('Refreshing browser...')
+            logger.info('Click time out - {}'.format(xpath))
+            logger.info('Refreshing browser...')
             self.browser.refresh()
             time.sleep(2)
             return self.wait_and_click(xpath)
@@ -109,7 +111,7 @@ class CollectLinks:
 
         time.sleep(1)
 
-        print('Scrolling down')
+        logger.info('Scrolling down')
 
         elem = self.browser.find_element_by_tag_name("body")
 
@@ -132,7 +134,7 @@ class CollectLinks:
 
         photo_grid_boxes = self.browser.find_elements(By.XPATH, '//div[@class="bRMDJf islir"]')
 
-        print('Scraping links')
+        logger.info('Scraping links')
 
         links = []
 
@@ -150,11 +152,11 @@ class CollectLinks:
                     links.append(src)
 
             except Exception as e:
-                print('[Exception occurred while collecting links from google] {}'.format(e))
+                logger.info('[Exception occurred while collecting links from google] {}'.format(e))
 
         links = self.remove_duplicates(links)
 
-        print('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('google', keyword, len(links)))
+        logger.info('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('google', keyword, len(links)))
         self.browser.close()
 
         return links
@@ -165,7 +167,7 @@ class CollectLinks:
 
         time.sleep(1)
 
-        print('Scrolling down')
+        logger.info('Scrolling down')
 
         elem = self.browser.find_element_by_tag_name("body")
 
@@ -176,7 +178,7 @@ class CollectLinks:
         imgs = self.browser.find_elements(By.XPATH,
                                           '//div[@class="photo_bx api_ani_send _photoBox"]//img[@class="_image _listImage"]')
 
-        print('Scraping links')
+        logger.info('Scraping links')
 
         links = []
 
@@ -186,24 +188,24 @@ class CollectLinks:
                 if src[0] != 'd':
                     links.append(src)
             except Exception as e:
-                print('[Exception occurred while collecting links from naver] {}'.format(e))
+                logger.info('[Exception occurred while collecting links from naver] {}'.format(e))
 
         links = self.remove_duplicates(links)
 
-        print('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('naver', keyword, len(links)))
+        logger.info('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('naver', keyword, len(links)))
         self.browser.close()
 
         return links
 
     def google_full(self, keyword, add_url=""):
-        print('[Full Resolution Mode]')
+        logger.info('[Full Resolution Mode]')
 
         self.browser.get("https://www.google.com/search?q={}&tbm=isch{}".format(keyword, add_url))
         time.sleep(1)
 
         elem = self.browser.find_element_by_tag_name("body")
 
-        print('Scraping links')
+        logger.info('Scraping links')
 
         self.wait_and_click('//div[@data-ri="0"]')
         time.sleep(1)
@@ -235,14 +237,14 @@ class CollectLinks:
 
                 if src is not None:
                     links.append(src)
-                    print('%d: %s' % (count, src))
+                    logger.info('%d: %s' % (count, src))
                     count += 1
 
             except StaleElementReferenceException:
-                # print('[Expected Exception - StaleElementReferenceException]')
+                # logger.info('[Expected Exception - StaleElementReferenceException]')
                 pass
             except Exception as e:
-                print('[Exception occurred while collecting links from google_full] {}'.format(e))
+                logger.info('[Exception occurred while collecting links from google_full] {}'.format(e))
 
             scroll = self.get_scroll()
             if scroll == last_scroll:
@@ -258,13 +260,13 @@ class CollectLinks:
 
         links = self.remove_duplicates(links)
 
-        print('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('google_full', keyword, len(links)))
+        logger.info('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('google_full', keyword, len(links)))
         self.browser.close()
 
         return links
 
     def naver_full(self, keyword, add_url=""):
-        print('[Full Resolution Mode]')
+        logger.info('[Full Resolution Mode]')
 
         self.browser.get(
             "https://search.naver.com/search.naver?where=image&sm=tab_jum&query={}{}".format(keyword, add_url))
@@ -272,7 +274,7 @@ class CollectLinks:
 
         elem = self.browser.find_element_by_tag_name("body")
 
-        print('Scraping links')
+        logger.info('Scraping links')
 
         self.wait_and_click('//div[@class="photo_bx api_ani_send _photoBox"]')
         time.sleep(1)
@@ -294,14 +296,14 @@ class CollectLinks:
 
                     if src not in links and src is not None:
                         links.append(src)
-                        print('%d: %s' % (count, src))
+                        logger.info('%d: %s' % (count, src))
                         count += 1
 
             except StaleElementReferenceException:
-                # print('[Expected Exception - StaleElementReferenceException]')
+                # logger.info('[Expected Exception - StaleElementReferenceException]')
                 pass
             except Exception as e:
-                print('[Exception occurred while collecting links from naver_full] {}'.format(e))
+                logger.info('[Exception occurred while collecting links from naver_full] {}'.format(e))
 
             scroll = self.get_scroll()
             if scroll == last_scroll:
@@ -318,7 +320,7 @@ class CollectLinks:
 
         links = self.remove_duplicates(links)
 
-        print('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('naver_full', keyword, len(links)))
+        logger.info('Collect links done. Site: {}, Keyword: {}, Total: {}'.format('naver_full', keyword, len(links)))
         self.browser.close()
 
         return links
