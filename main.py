@@ -13,7 +13,6 @@ Copyright 2018 YoongiKim
    See the License for the specific language governing permissions and
    limitations under the License.
 """
-
 import os
 import requests
 import shutil
@@ -66,7 +65,6 @@ class AutoCrawler:
         :param limit: Maximum count of images to download. (0: infinite)
         :param proxy_list: The proxy list. Every thread will randomly choose one from the list.
         """
-
         self.skip = skip_already_exist
         self.n_threads = n_threads
         self.do_google = do_google
@@ -128,8 +126,8 @@ class AutoCrawler:
         if not os.path.exists(path):
             os.makedirs(path)
 
-    @staticmethod
-    def get_keywords(keywords_file='keywords.txt'):
+
+    def get_keywords(self, keywords_file='keywords.txt'):
         # read search keywords from file
         with open(keywords_file, 'r', encoding='utf-8-sig') as f:
             text = f.read()
@@ -146,8 +144,7 @@ class AutoCrawler:
 
         return keywords
 
-    @staticmethod
-    def save_object_to_file(object, file_path, is_base64=False):
+    def save_object_to_file(self, object, file_path, is_base64=False):
         try:
             with open('{}'.format(file_path), 'wb') as file:
                 if is_base64:
@@ -165,6 +162,7 @@ class AutoCrawler:
 
     def download_images(self, keyword, links, site_name, max_count=0):
         self.make_dir('{}/{}'.format(self.download_path, keyword.replace('"', '')))
+        fp = open(os.path.join(self.download_path,keyword.replace('"', ''),f"{site_name}_links.txt"), "w")
         total = len(links)
         success_count = 0
 
@@ -200,19 +198,27 @@ class AutoCrawler:
                 del response
 
                 ext2 = self.validate_image(path)
+                sucess = True
                 if ext2 is None:
                     print('Unreadable file - {}'.format(link))
                     os.remove(path)
                     success_count -= 1
+                    sucess = False
                 else:
                     if ext != ext2:
                         path2 = no_ext_path + '.' + ext2
                         os.rename(path, path2)
                         print('Renamed extension {} -> {}'.format(ext, ext2))
 
+                if sucess:
+                    fp.write(f"{path}: {link}\n")
+                    print(f"{path}: {link}")
+
             except Exception as e:
                 print('Download failed - ', e)
                 continue
+
+        fp.close()
 
     def download_from_site(self, keyword, site_code):
         site_name = Sites.get_text(site_code)

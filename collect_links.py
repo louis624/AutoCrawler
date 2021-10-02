@@ -26,11 +26,9 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import os.path as osp
 
-
 class CollectLinks:
     def __init__(self, no_gui=False, proxy=None):
         executable = ''
-
         if platform.system() == 'Windows':
             print('Detected OS : Windows')
             executable = './chromedriver/chromedriver_win.exe'
